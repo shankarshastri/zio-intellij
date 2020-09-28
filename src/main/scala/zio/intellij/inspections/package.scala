@@ -344,7 +344,7 @@ package object inspections {
   object `_ => ZIO.unit` {
 
     def unapply(expr: ScExpression): Boolean = expr match {
-      case lambda(_, Some(`ZIO.unit`(_))) => true
+      case lambda(_, Some(`ZIO.unit`(_, _))) => true
       case _                              => false
     }
   }

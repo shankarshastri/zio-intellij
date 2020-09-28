@@ -12,6 +12,7 @@ import com.intellij.execution.testframework.sm.runner.ui.SMTRunnerConsoleView
 import com.intellij.execution.testframework.ui.BaseTestsOutputConsoleView
 import com.intellij.execution.ui.ConsoleView
 import com.intellij.execution.{DefaultExecutionResult, ExecutionException, ExecutionResult, Executor}
+import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.module.Module
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.OrderRootType
@@ -28,7 +29,7 @@ import org.jetbrains.plugins.scala.testingSupport.test.actions.ScalaRerunFailedT
 import org.jetbrains.plugins.scala.testingSupport.test.sbt._
 import org.jetbrains.plugins.scala.testingSupport.test.testdata.{ClassTestData, TestConfigurationData}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ListBuffer
 
 class ZTestRunConfiguration(
@@ -77,15 +78,15 @@ class ZTestRunConfiguration(
     } else
       module.libraries.map(_.getName).exists(_.contains("zio-test-intellij"))
 
-  override def getState(executor: Executor, env: ExecutionEnvironment): RunProfileState = {
+  override def getState(executor: Executor, env: ExecutionEnvironment) = {
     val module = getModule
     if (module == null) throw new ExecutionException("Module is not specified")
 
     new ZioTestCommandLineState(env, module)
   }
 
-  private class ZioTestCommandLineState(env: ExecutionEnvironment, module: Module)
-      extends ScalaTestFrameworkCommandLineState(this, env, testConfigurationData, runnerInfo, sbtSupport)(
+  class ZioTestCommandLineState(env: ExecutionEnvironment, module: Module)
+      extends ScalaTestFrameworkCommandLineState(this, env, testConfigurationData, None, runnerInfo, sbtSupport)(
         project,
         module
       ) {
@@ -106,8 +107,8 @@ class ZTestRunConfiguration(
         .sliding(2, 2)
         .toList
         .collect {
-          case "-s" :: suite :: _       => mutableList.append("-s", suite)
-          case "-testName" :: test :: _ => mutableList.append("-t", test)
+          case "-s" :: suite :: _       => mutableList.appendAll(Seq("-s", suite))
+          case "-testName" :: test :: _ => mutableList.appendAll(Seq("-t", test))
         }
       mutableList.toList
     }
@@ -117,7 +118,7 @@ class ZTestRunConfiguration(
 
       val consoleView: ConsoleView =
         if (shouldCreateTestConsole) {
-          val consoleProperties = new SMTRunnerConsoleProperties(self, "ZIO Test", executor)
+          val consoleProperties = new ScalaTestFrameworkConsoleProperties(self, "ZIO Test", executor)
           SMTestRunnerConnectionUtil.createAndAttachConsole("ZIO Test", processHandler, consoleProperties)
         } else {
           val console = new ConsoleViewImpl(project, true)
@@ -133,17 +134,17 @@ class ZTestRunConfiguration(
       processHandler: ProcessHandler
     ): DefaultExecutionResult = {
       val result         = new DefaultExecutionResult(consoleView, processHandler)
-      val restartActions = createRestartActions(consoleView).toSeq.flatten
+      val restartActions = createRestartActions(consoleView)
       result.setRestartActions(restartActions: _*)
       result
     }
 
-    private def createRestartActions(consoleView: ConsoleView) =
+    private def createRestartActions(consoleView: ConsoleView): Seq[AnAction] =
       consoleView match {
         case testConsole: BaseTestsOutputConsoleView =>
           val rerunFailedTestsAction = {
-            val action = new ScalaRerunFailedTestsAction(testConsole)
-            action.init(testConsole.getProperties)
+            val properties = testConsole.getProperties.asInstanceOf[ScalaTestFrameworkConsoleProperties]
+            val action     = new ScalaRerunFailedTestsAction(testConsole, properties)
             action.setModelProvider(() => testConsole.asInstanceOf[SMTRunnerConsoleView].getResultsViewer)
             action
           }
@@ -152,9 +153,9 @@ class ZTestRunConfiguration(
             override def getAutoTestManager(project: Project): AbstractAutoTestManager =
               JavaAutoRunManager.getInstance(project)
           }
-          Some(Seq(rerunFailedTestsAction, toggleAutoTestAction))
+          Seq(rerunFailedTestsAction, toggleAutoTestAction)
         case _ =>
-          None
+          Nil
       }
   }
 

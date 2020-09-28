@@ -10,6 +10,8 @@ addCommandAlias(
   "all scalafmtSbtCheck scalafmtCheck test:scalafmtCheck"
 )
 
+scalacOptions += "-deprecation"
+
 lazy val `zio-intellij` = project
   .in(file("."))
   .enablePlugins(SbtIdeaPlugin)
@@ -18,7 +20,7 @@ lazy val `zio-intellij` = project
     version := pluginVersion,
     intellijPlugins := Seq(
       "com.intellij.java".toPlugin,
-      "org.intellij.scala:2020.3.3".toPlugin
+      "org.intellij.scala:2020.3.5".toPlugin
     ),
     patchPluginXml := pluginXmlOptions { xml =>
       xml.version = version.value
